@@ -582,7 +582,7 @@ export class Client extends AsyncEventEmitter<Events> {
     body.append("file", file);
 
     const [key, value] = this.authenticationHeader;
-    const data: { id: string } = await fetch(
+    const res = await fetch(
       `${uploadUrl ?? this.configuration?.features.autumn.url}/${tag}`,
       {
         method: "POST",
@@ -591,8 +591,29 @@ export class Client extends AsyncEventEmitter<Events> {
           [key]: value,
         },
       },
-    ).then((res) => res.json());
+    );
 
+    if (!res.ok) {
+      // Previously this fell straight through to res.json(), which throws a
+      // cryptic "Unexpected token '<' ... is not valid JSON" for any
+      // non-success response (a proxy error page, a size-limit rejection, a
+      // gateway timeout) — giving callers and users no way to tell what
+      // actually went wrong.
+      let detail = "";
+      try {
+        const contentType = res.headers.get("content-type") ?? "";
+        detail = contentType.includes("json")
+          ? JSON.stringify(await res.json())
+          : (await res.text()).slice(0, 200);
+      } catch {
+        /* best-effort detail only */
+      }
+      throw new Error(
+        `Upload failed (${res.status} ${res.statusText})${detail ? `: ${detail}` : ""}`,
+      );
+    }
+
+    const data: { id: string } = await res.json();
     return data.id;
   }
 
