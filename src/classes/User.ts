@@ -73,6 +73,27 @@ export class User {
   }
 
   /**
+   * This user's nickname in any server shared with the current user, if set.
+   * Nicknames live on ServerMember (per-server), but contexts like DMs only
+   * have a plain User reference with no server attached — this looks across
+   * all servers the current user is in to find one. With a single-server
+   * deployment in mind, this means DMs can show the name people actually
+   * recognize someone by instead of their raw global username.
+   */
+  get serverNickname(): string | undefined {
+    for (const server of this.#collection.client.servers.values()) {
+      const member = this.#collection.client.serverMembers.getByKey({
+        server: server.id,
+        user: this.id,
+      });
+
+      if (member?.nickname) {
+        return member.nickname;
+      }
+    }
+  }
+
+  /**
    * Avatar
    */
   get avatar(): File | undefined {
