@@ -4,6 +4,17 @@ import type { Client } from "../Client.js";
 
 import { File } from "./File.js";
 
+/** The three built-in permission tiers - see Role.class on the backend. */
+export type RoleClass = "admin" | "member" | "free";
+
+// `class`/`max_message_length` are newer than the generated `stoat-api` package
+// (it's regenerated from the OpenAPI spec separately from this codebase, and
+// hasn't caught up yet) - read them defensively rather than waiting on that.
+type APIRoleWithClass = APIRole & {
+  class?: RoleClass;
+  max_message_length?: number;
+};
+
 /**
  * Server Role
  */
@@ -21,6 +32,8 @@ export class ServerRole {
   readonly colour?: string;
   readonly hoist: boolean;
   readonly rank: number;
+  readonly class?: RoleClass;
+  readonly maxMessageLength?: number;
 
   /**
    * Construct server role
@@ -43,6 +56,10 @@ export class ServerRole {
     this.colour = data.colour ?? undefined;
     this.hoist = data.hoist || false;
     this.rank = data.rank ?? 0;
+
+    const withClass = data as APIRoleWithClass;
+    this.class = withClass.class;
+    this.maxMessageLength = withClass.max_message_length;
   }
 
   /**

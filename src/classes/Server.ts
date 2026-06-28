@@ -20,7 +20,11 @@ import { decodeTime } from "ulid";
 
 import type { ServerCollection } from "../collections/ServerCollection.js";
 import { hydrate } from "../hydration/index.js";
-import type { ServerFlags } from "../hydration/server.js";
+import {
+  builtInClassDefault,
+  type ClassDefault,
+  type ServerFlags,
+} from "../hydration/server.js";
 import {
   bitwiseAndEq,
   calculatePermission,
@@ -33,7 +37,7 @@ import type { File } from "./File.js";
 import { ChannelInvite } from "./Invite.js";
 import { ServerBan } from "./ServerBan.js";
 import { ServerMember } from "./ServerMember.js";
-import { ServerRole } from "./ServerRole.js";
+import { ServerRole, type RoleClass } from "./ServerRole.js";
 import { User } from "./User.js";
 
 /**
@@ -170,6 +174,73 @@ export class Server {
    */
   get defaultPermissions(): bigint {
     return this.#collection.getUnderlyingObject(this.id).defaultPermissions;
+  }
+
+  /**
+   * Per-class default permissions, keyed by class - see `ServerRole.class`
+   */
+  get classDefaults(): Map<RoleClass, ClassDefault> {
+    return this.#collection.getUnderlyingObject(this.id).classDefaults;
+  }
+
+  /**
+   * Get this server's effective default for a class, falling back to the same
+   * built-in values the backend uses (`ClassDefault::built_in`) if this server
+   * hasn't customised that class yet.
+   */
+  getClassDefault(roleClass: RoleClass): ClassDefault {
+    return this.classDefaults.get(roleClass) ?? builtInClassDefault(roleClass);
+  }
+
+  /**
+   * Resolve the effective max message length for a member holding the given roles.
+   *
+   * Mirrors `Server::resolve_max_message_length` on the backend exactly, so the
+   * compose box's character counter matches what the server will actually accept.
+   * Returns `undefined` if no role/class info applies (caller should fall back to
+   * the instance-wide default), `null` for unlimited (an Admin-class role is held),
+   * or the highest resolved finite number across all held roles otherwise.
+   */
+  resolveMaxMessageLength(memberRoleIds: string[]): number | null | undefined {
+    let highest: number | undefined;
+
+    for (const roleId of memberRoleIds) {
+      const role = this.roles.get(roleId);
+      if (!role) continue;
+
+      if (role.class === "admin") {
+        return null;
+      }
+
+      const resolved =
+        role.maxMessageLength ??
+        (role.class ? this.getClassDefault(role.class).maxMessageLength : undefined);
+
+      if (resolved !== undefined) {
+        highest = highest === undefined ? resolved : Math.max(highest, resolved);
+      }
+    }
+
+    return highest;
+  }
+
+  /**
+   * Replace this server's class defaults
+   * @param classDefaults New class defaults, keyed by class
+   */
+  async setClassDefaults(
+    classDefaults: Record<
+      RoleClass,
+      {
+        permissions: Override;
+        channel_overrides?: Record<string, Override>;
+        max_message_length?: number;
+      }
+    >,
+  ): Promise<void> {
+    await this.edit({
+      class_defaults: classDefaults,
+    } as DataEditServer);
   }
 
   /**
