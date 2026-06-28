@@ -244,6 +244,76 @@ export class Server {
   }
 
   /**
+   * Update one class's base permissions, preserving every other class's
+   * current defaults (the underlying PATCH replaces the whole map, so this
+   * reads the current state first rather than making the caller do it).
+   * @param roleClass Class to update
+   * @param permissions New allow/deny override
+   */
+  async setClassDefaultPermissions(
+    roleClass: RoleClass,
+    permissions: Override,
+  ): Promise<void> {
+    const all: Parameters<Server["setClassDefaults"]>[0] = {} as never;
+
+    for (const cls of ["admin", "member", "free"] as RoleClass[]) {
+      const current = this.getClassDefault(cls);
+
+      all[cls] = {
+        permissions:
+          cls === roleClass
+            ? permissions
+            : {
+                allow: Number(current.permissions.a),
+                deny: Number(current.permissions.d),
+              },
+        channel_overrides: Object.fromEntries(
+          [...current.channelOverrides.entries()].map(([id, v]) => [
+            id,
+            { allow: Number(v.a), deny: Number(v.d) },
+          ]),
+        ),
+        max_message_length: current.maxMessageLength,
+      };
+    }
+
+    await this.setClassDefaults(all);
+  }
+
+  /**
+   * Update one class's default max message length, preserving every other
+   * class's current defaults and this class's current permissions.
+   * @param roleClass Class to update
+   * @param maxMessageLength New value, or undefined to unset
+   */
+  async setClassDefaultMaxMessageLength(
+    roleClass: RoleClass,
+    maxMessageLength: number | undefined,
+  ): Promise<void> {
+    const all: Parameters<Server["setClassDefaults"]>[0] = {} as never;
+
+    for (const cls of ["admin", "member", "free"] as RoleClass[]) {
+      const current = this.getClassDefault(cls);
+
+      all[cls] = {
+        permissions: {
+          allow: Number(current.permissions.a),
+          deny: Number(current.permissions.d),
+        },
+        channel_overrides: Object.fromEntries(
+          [...current.channelOverrides.entries()].map(([id, v]) => [
+            id,
+            { allow: Number(v.a), deny: Number(v.d) },
+          ]),
+        ),
+        max_message_length: cls === roleClass ? maxMessageLength : current.maxMessageLength,
+      };
+    }
+
+    await this.setClassDefaults(all);
+  }
+
+  /**
    * Server flags
    */
   get flags(): ServerFlags {
