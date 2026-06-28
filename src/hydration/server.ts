@@ -118,25 +118,28 @@ export const serverHydration: Hydrate<APIServer, HydratedServer> = {
       ),
     defaultPermissions: (server) => BigInt(server.default_permissions),
     classDefaults: (server) => {
-      const raw = (server as APIServerWithClassDefaults).class_defaults ?? {};
+      const raw: NonNullable<APIServerWithClassDefaults["class_defaults"]> =
+        (server as APIServerWithClassDefaults).class_defaults ?? ({} as never);
+
+      const entries = Object.entries(raw) as [RoleClass, (typeof raw)[RoleClass]][];
+
       return new Map(
-        (Object.entries(raw) as [RoleClass, (typeof raw)[RoleClass]][]).map(
-          ([roleClass, classDefault]) => [
-            roleClass,
-            {
-              permissions: {
-                a: BigInt(classDefault.permissions.a),
-                d: BigInt(classDefault.permissions.d),
-              },
-              channelOverrides: new Map(
-                Object.entries(classDefault.channel_overrides ?? {}).map(
-                  ([channelId, override]) => [
-                    channelId,
-                    { a: BigInt(override.a), d: BigInt(override.d) },
-                  ],
-                ),
-              ),
-              maxMessageLength: classDefault.max_message_length,
+        entries.map(([roleClass, classDefault]) => [
+          roleClass,
+          {
+            permissions: {
+              a: BigInt(classDefault.permissions.a),
+              d: BigInt(classDefault.permissions.d),
+            },
+            channelOverrides: new Map(
+              Object.entries(
+                classDefault.channel_overrides ?? ({} as Record<string, { a: number; d: number }>),
+              ).map(([channelId, override]) => [
+                channelId,
+                { a: BigInt(override.a), d: BigInt(override.d) },
+              ]),
+            ),
+            maxMessageLength: classDefault.max_message_length,
             },
           ],
         ),
