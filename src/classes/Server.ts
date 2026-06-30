@@ -516,13 +516,22 @@ export class Server {
 
   /**
    * Create a channel
-   * @param data Channel create route data
+   * @param data Channel create route data. `type: "Forum"` and
+   * `allowed_tags`/`solution_enabled` aren't in stoat-api's type yet
+   * (nac-server#10) - the `as DataCreateServerChannel` cast is the
+   * temporary workaround, drop it once stoat-api is regenerated/republished.
    * @returns The newly-created channel
    */
-  async createChannel(data: DataCreateServerChannel): Promise<Channel> {
+  async createChannel(
+    data: Omit<DataCreateServerChannel, "type"> & {
+      type?: DataCreateServerChannel["type"] | "Forum";
+      allowed_tags?: string[];
+      solution_enabled?: boolean;
+    },
+  ): Promise<Channel> {
     const channel = await this.#collection.client.api.post(
       `/servers/${this.id as ""}/channels`,
-      data,
+      data as DataCreateServerChannel,
     );
 
     return this.#collection.client.channels.getOrCreate(channel._id, channel);
