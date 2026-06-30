@@ -32,6 +32,20 @@ import type { ServerMember } from "./ServerMember.js";
 import type { User } from "./User.js";
 import { VoiceParticipant } from "./VoiceParticipant.js";
 
+// TODO: drop these local field extensions once stoat-api is
+// regenerated/republished from a stoatchat release that includes
+// ForumChannel/forum_title/forum_tags/allowed_tags/solution_enabled
+// (tracked: nac-server#10).
+interface ForumPostFields {
+  forum_title?: string;
+  forum_tags?: string[];
+}
+
+interface ForumChannelEditFields {
+  allowed_tags?: string[];
+  solution_enabled?: boolean;
+}
+
 /**
  * Channel Class
  */
@@ -77,8 +91,11 @@ export class Channel {
 
   /**
    * Channel type
+   *
+   * Includes "ForumChannel" as a literal widening on top of `APIChannel`'s
+   * type until stoat-api is regenerated/republished with it (nac-server#10).
    */
-  get type(): APIChannel["channel_type"] {
+  get type(): APIChannel["channel_type"] | "ForumChannel" {
     return this.#collection.getUnderlyingObject(this.id).channelType;
   }
 
@@ -256,6 +273,22 @@ export class Channel {
    */
   get mature(): boolean {
     return this.#collection.getUnderlyingObject(this.id).nsfw;
+  }
+
+  /**
+   * Tags posts in this forum channel may be created with
+   * @requires `ForumChannel`
+   */
+  get allowedTags(): string[] | undefined {
+    return this.#collection.getUnderlyingObject(this.id).allowedTags;
+  }
+
+  /**
+   * Whether replies in this forum channel can be marked as the "solution" to a post
+   * @requires `ForumChannel`
+   */
+  get solutionEnabled(): boolean {
+    return this.#collection.getUnderlyingObject(this.id).solutionEnabled;
   }
 
   /**
@@ -462,12 +495,12 @@ export class Channel {
 
   /**
    * Edit a channel
-   * @param data Changes
+   * @param data Changes. `allowed_tags`/`solution_enabled` apply to `ForumChannel` only.
    */
-  async edit(data: DataEditChannel) {
+  async edit(data: DataEditChannel & ForumChannelEditFields) {
     const channel = await this.#collection.client.api.patch(
       `/channels/${this.id as ""}`,
-      data,
+      data as DataEditChannel,
     );
 
     this.#collection.updateUnderlyingObject(
@@ -518,15 +551,20 @@ export class Channel {
 
   /**
    * Send a message
-   * @param data Either the message as a string or message sending route data
-   * @requires `SavedMessages`, `DirectMessage`, `Group`, `TextChannel`
+   * @param data Either the message as a string or message sending route data.
+   * `forum_title`/`forum_tags` are accepted for the root message of a
+   * `ForumChannel` post (omit for replies, omit entirely outside forum
+   * channels). TODO: drop the `as DataMessageSend` cast once stoat-api is
+   * regenerated/republished with these fields (nac-server#10) - they're
+   * still sent over the wire today, this only affects the local type.
+   * @requires `SavedMessages`, `DirectMessage`, `Group`, `TextChannel`, `ForumChannel`
    * @returns Sent message
    */
   async sendMessage(
-    data: string | DataMessageSend,
+    data: string | (DataMessageSend & ForumPostFields),
     idempotencyKey: string = ulid(),
   ): Promise<Message> {
-    const msg: DataMessageSend =
+    const msg: DataMessageSend & ForumPostFields =
       typeof data === "string" ? { content: data } : data;
 
     // Mark as silent message
@@ -538,7 +576,7 @@ export class Channel {
 
     const message = await this.#collection.client.api.post(
       `/channels/${this.id as ""}/messages`,
-      msg,
+      msg as DataMessageSend,
       {
         headers: {
           "Idempotency-Key": idempotencyKey,
