@@ -30,9 +30,25 @@ export type HydratedMessage = {
   masquerade?: Masquerade;
   pinned?: boolean;
   flags?: MessageFlags;
+
+  // TODO: drop the `ForumMessageFields` casts below once stoat-api is
+  // regenerated/republished from a stoatchat release that includes forum_*
+  // fields on the Message schema (tracked: nac-server#10).
+  forumTitle?: string;
+  forumTags?: string[];
+  forumSolution?: boolean;
 };
 
-export const messageHydration: Hydrate<Merge<Message>, HydratedMessage> = {
+export interface ForumMessageFields {
+  forum_title?: string;
+  forum_tags?: string[];
+  forum_solution?: boolean;
+}
+
+export const messageHydration: Hydrate<
+  Merge<Message> & ForumMessageFields,
+  HydratedMessage
+> = {
   keyMapping: {
     _id: "id",
     channel: "channelId",
@@ -41,6 +57,9 @@ export const messageHydration: Hydrate<Merge<Message>, HydratedMessage> = {
     edited: "editedAt",
     mentions: "mentionIds",
     replies: "replyIds",
+    forum_title: "forumTitle",
+    forum_tags: "forumTags",
+    forum_solution: "forumSolution",
   },
   functions: {
     id: (message) => message._id,
@@ -75,6 +94,9 @@ export const messageHydration: Hydrate<Merge<Message>, HydratedMessage> = {
     masquerade: (message) => message.masquerade!,
     pinned: (message) => message.pinned!,
     flags: (message) => message.flags!,
+    forumTitle: (message) => message.forum_title,
+    forumTags: (message) => message.forum_tags,
+    forumSolution: (message) => message.forum_solution,
   },
   initialHydration: () => ({
     reactions: new ReactiveMap(),

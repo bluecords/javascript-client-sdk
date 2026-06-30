@@ -11,7 +11,7 @@ import type { Hydrate } from "./index.js";
 
 export type HydratedChannel = {
   id: string;
-  channelType: APIChannel["channel_type"];
+  channelType: APIChannel["channel_type"] | "ForumChannel";
 
   name: string;
   description?: string;
@@ -34,9 +34,24 @@ export type HydratedChannel = {
   lastMessageId?: string;
 
   voice?: { maxUsers?: number };
+
+  // TODO: drop the `ForumChannelFields` casts below, and the
+  // `"ForumChannel"` literal widening on channelType, once stoat-api is
+  // regenerated/republished from a stoatchat release that includes
+  // ForumChannel + allowed_tags/solution_enabled (tracked: nac-server#10).
+  allowedTags?: string[];
+  solutionEnabled: boolean;
 };
 
-export const channelHydration: Hydrate<Merge<APIChannel>, HydratedChannel> = {
+export interface ForumChannelFields {
+  allowed_tags?: string[];
+  solution_enabled?: boolean;
+}
+
+export const channelHydration: Hydrate<
+  Merge<APIChannel> & ForumChannelFields,
+  HydratedChannel
+> = {
   keyMapping: {
     _id: "id",
     channel_type: "channelType",
@@ -48,6 +63,8 @@ export const channelHydration: Hydrate<Merge<APIChannel>, HydratedChannel> = {
     role_permissions: "rolePermissions",
     last_message_id: "lastMessageId",
     slowmode: "slowmode",
+    allowed_tags: "allowedTags",
+    solution_enabled: "solutionEnabled",
   },
   functions: {
     id: (channel) => channel._id,
@@ -79,6 +96,8 @@ export const channelHydration: Hydrate<Merge<APIChannel>, HydratedChannel> = {
     nsfw: (channel) => channel.nsfw || false,
     lastMessageId: (channel) => channel.last_message_id!,
     slowmode: (channel) => channel.slowmode ?? 0,
+    allowedTags: (channel) => channel.allowed_tags,
+    solutionEnabled: (channel) => channel.solution_enabled || false,
     voice: (channel) =>
       !!channel.voice ||
       channel.channel_type === "DirectMessage" ||

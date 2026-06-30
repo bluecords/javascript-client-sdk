@@ -244,6 +244,27 @@ export class Message {
   }
 
   /**
+   * Title of this message when it is a forum post (root message in a `ForumChannel`)
+   */
+  get forumTitle(): string | undefined {
+    return this.#collection.getUnderlyingObject(this.id).forumTitle;
+  }
+
+  /**
+   * Tags applied to this message when it is a forum post
+   */
+  get forumTags(): string[] | undefined {
+    return this.#collection.getUnderlyingObject(this.id).forumTags;
+  }
+
+  /**
+   * Whether this message is marked as the accepted solution to the forum post it replies to
+   */
+  get forumSolution(): boolean {
+    return this.#collection.getUnderlyingObject(this.id).forumSolution || false;
+  }
+
+  /**
    * Flags
    */
   get flags(): number {
@@ -427,6 +448,30 @@ export class Message {
     return this.#collection.client.api.delete(
       `/channels/${this.channelId as ""}/messages/${this.id as ""}/pin`,
     );
+  }
+
+  /**
+   * Mark this reply as the accepted solution to the forum post it replies to
+   * @requires `ForumChannel` with `solutionEnabled`, called on a reply (not a post's root message)
+   *
+   * TODO: this route isn't in stoat-api's typed route map yet (added on
+   * stoatchat alongside ForumChannel, not yet in a published release -
+   * nac-server#10), hence the `as never` cast. Drop the cast once republished.
+   */
+  markSolution(): Promise<void> {
+    return this.#collection.client.api.post(
+      `/channels/${this.channelId as ""}/messages/${this.id as ""}/solution` as never,
+    ) as unknown as Promise<void>;
+  }
+
+  /**
+   * Unmark this reply as the solution to its forum post
+   * TODO: same stoat-api gap as `markSolution` - see that method's note.
+   */
+  unmarkSolution(): Promise<void> {
+    return this.#collection.client.api.delete(
+      `/channels/${this.channelId as ""}/messages/${this.id as ""}/solution` as never,
+    ) as unknown as Promise<void>;
   }
 }
 
