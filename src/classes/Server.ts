@@ -232,8 +232,8 @@ export class Server {
     classDefaults: Record<
       RoleClass,
       {
-        permissions: Override;
-        channel_overrides?: Record<string, Override>;
+        permissions: OverrideField;
+        channel_overrides?: Record<string, OverrideField>;
         max_message_length?: number;
       }
     >,
@@ -262,15 +262,15 @@ export class Server {
       all[cls] = {
         permissions:
           cls === roleClass
-            ? permissions
+            ? { a: permissions.allow, d: permissions.deny }
             : {
-                allow: Number(current.permissions.a),
-                deny: Number(current.permissions.d),
+                a: Number(current.permissions.a),
+                d: Number(current.permissions.d),
               },
         channel_overrides: Object.fromEntries(
           [...current.channelOverrides.entries()].map(([id, v]) => [
             id,
-            { allow: Number(v.a), deny: Number(v.d) },
+            { a: Number(v.a), d: Number(v.d) },
           ]),
         ),
         max_message_length: current.maxMessageLength,
@@ -297,13 +297,13 @@ export class Server {
 
       all[cls] = {
         permissions: {
-          allow: Number(current.permissions.a),
-          deny: Number(current.permissions.d),
+          a: Number(current.permissions.a),
+          d: Number(current.permissions.d),
         },
         channel_overrides: Object.fromEntries(
           [...current.channelOverrides.entries()].map(([id, v]) => [
             id,
-            { allow: Number(v.a), deny: Number(v.d) },
+            { a: Number(v.a), d: Number(v.d) },
           ]),
         ),
         max_message_length: cls === roleClass ? maxMessageLength : current.maxMessageLength,
