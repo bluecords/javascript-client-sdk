@@ -15,7 +15,7 @@ import {
   Permission,
 } from "../permissions/definitions.js";
 
-import type { Hydrate } from "./index.js";
+import type { Hydrate, KeyMapping } from "./index.js";
 
 export type ClassDefault = {
   permissions: { a: bigint; d: bigint };
@@ -100,7 +100,11 @@ export const serverHydration: Hydrate<APIServer, HydratedServer> = {
     channels: "channelIds",
     system_messages: "systemMessages",
     default_permissions: "defaultPermissions",
-  },
+    // `class_defaults` is newer than the generated `stoat-api` package (see
+    // `APIServerWithClassDefaults` above) - cast needed since `APIServer`
+    // doesn't declare this key yet.
+    class_defaults: "classDefaults",
+  } as Partial<KeyMapping<APIServerWithClassDefaults, HydratedServer>>,
   functions: {
     id: (server) => server._id,
     ownerId: (server) => server.owner,
