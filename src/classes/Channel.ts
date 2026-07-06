@@ -750,7 +750,7 @@ export class Channel {
   #ackTimeout?: number;
   #ackLimit?: number;
   #manuallyMarked?: boolean;
-  #pendingAck?: () => void;
+  #pendingAckMessageId?: string;
 
   /**
    * Immediately send any pending debounced ack instead of waiting for its
@@ -760,14 +760,28 @@ export class Channel {
    * fires, the request is lost entirely and the server never learns the
    * channel was read, so a reload re-syncs to the still-unread server
    * state. Callers should invoke this from a `visibilitychange` (hidden)
-   * or `beforeunload` handler. No-op if there's nothing pending.
+   * or `pagehide` handler. No-op if there's nothing pending.
+   *
+   * Deliberately bypasses the normal API client and fires a raw
+   * `fetch(..., { keepalive: true })` instead: confirmed (via real user
+   * testing) that even calling the normal debounced request at exactly the
+   * right moment wasn't enough - a plain fetch/XHR triggered this late is
+   * not guaranteed to complete before the browser tears down the page on
+   * unload, and was in fact still getting silently dropped. `keepalive`
+   * is the actual browser-level guarantee needed here.
    */
   flushAck(): void {
-    if (!this.#pendingAck) return;
+    const lastMessageId = this.#pendingAckMessageId;
+    if (!lastMessageId) return;
     clearTimeout(this.#ackTimeout);
-    const pending = this.#pendingAck;
-    this.#pendingAck = undefined;
-    pending();
+    this.#pendingAckMessageId = undefined;
+    this.#ackLimit = undefined;
+    const { baseURL, headers } = this.#collection.client.api.config;
+    fetch(`${baseURL}/channels/${this.id}/ack/${lastMessageId}`, {
+      method: "PUT",
+      headers,
+      keepalive: true,
+    }).catch(() => {});
   }
 
   /**
@@ -820,7 +834,7 @@ export class Channel {
      */
     const performAck = (): void => {
       this.#ackLimit = undefined;
-      this.#pendingAck = undefined;
+      this.#pendingAckMessageId = undefined;
       this.#collection.client.api.put(
         `/channels/${this.id}/ack/${lastMessageId as ""}`,
       );
@@ -833,7 +847,7 @@ export class Channel {
       performAck();
     }
 
-    this.#pendingAck = performAck;
+    this.#pendingAckMessageId = lastMessageId;
     this.#ackTimeout = setTimeout(performAck, 1500) as unknown as number;
 
     if (!this.#ackLimit) {
