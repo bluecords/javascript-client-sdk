@@ -44,6 +44,7 @@ export abstract class SystemMessage {
       case "user_remove":
         return new UserModeratedSystemMessage(client, message);
       case "user_joined":
+        return new UserJoinedSystemMessage(client, message);
       case "user_left":
       case "user_kicked":
       case "user_banned":
@@ -150,6 +151,50 @@ export class UserModeratedSystemMessage extends UserSystemMessage {
    */
   get by(): User | undefined {
     return this.client!.users.get(this.byId);
+  }
+}
+
+/**
+ * User Joined System Message
+ *
+ * Carries the inviter, so a join can render as "X joined, invited by Y".
+ * NAC's admins rely on this: their standing rule that someone must be
+ * vouched for is rarely followed in practice, so the join message in the
+ * welcome channel is the durable record of who brought a member in.
+ *
+ * `by` is OPTIONAL and must stay that way. The server only started sending
+ * it in stoatchat v0.18.0, joins that predate it have no inviter, and the
+ * members rescued on 2026-08-06 never used an invite link at all - so a
+ * missing inviter is a normal case to render, not an error.
+ */
+export class UserJoinedSystemMessage extends UserSystemMessage {
+  readonly byId?: string;
+
+  /**
+   * Construct System Message
+   * @param client Client
+   * @param systemMessage System Message
+   */
+  constructor(
+    client: Client,
+    systemMessage: APISystemMessage & {
+      type: "user_joined";
+    },
+  ) {
+    super(client, systemMessage);
+    // The pinned stoat-api types (0.13.5) still describe user_joined as
+    // { type, id } with no `by`, because `by` is our own addition
+    // (bluecords/stoatchat#33) and the generated package has not been
+    // regenerated since. The field IS on the wire; read it through a narrow
+    // cast rather than loosening the shared type.
+    this.byId = (systemMessage as { by?: string | null }).by ?? undefined;
+  }
+
+  /**
+   * User who invited this member, if known
+   */
+  get by(): User | undefined {
+    return this.byId ? this.client!.users.get(this.byId) : undefined;
   }
 }
 
