@@ -211,7 +211,9 @@ export class Client extends AsyncEventEmitter<Events> {
     super();
 
     this.options = {
-      baseURL: "https://stoat.chat/api",
+      // No upstream default: a missing baseURL must fail, not silently
+      // send this client (and its credentials) to another operator.
+      baseURL: "",
       partials: false,
       eagerFetching: true,
       syncUnreads: false,
@@ -337,8 +339,14 @@ export class Client extends AsyncEventEmitter<Events> {
     clearTimeout(this.#reconnectTimeout);
     this.events.disconnect();
     this.#setReady(false);
+    if (!this.configuration?.ws) {
+      throw new Error(
+        "No websocket URL configured. Refusing to fall back to upstream infrastructure.",
+      );
+    }
+
     this.events.connect(
-      this.configuration?.ws ?? "wss://stoat.chat/events",
+      this.configuration.ws,
       typeof this.#session === "string" ? this.#session : this.#session!.token,
     );
   }
