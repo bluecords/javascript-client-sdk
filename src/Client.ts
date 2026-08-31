@@ -60,6 +60,10 @@ export type Events = {
   policyChanges: [
     policyChanges: ProtocolV1["types"]["policyChange"][],
     acknowledge: () => Promise<void>,
+    recordConsent: (
+      policy: ProtocolV1["types"]["policyChange"],
+      acks: ProtocolV1["types"]["consentAck"][],
+    ) => Promise<void>,
   ];
 
   messageCreate: [message: Message];

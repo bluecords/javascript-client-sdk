@@ -35,6 +35,7 @@ export type ProtocolV1 = {
 
   types: {
     policyChange: PolicyChange;
+    consentAck: ConsentAck;
   };
 };
 
@@ -213,11 +214,90 @@ type ServerMessage =
  * Policy change type
  */
 type PolicyChange = {
+  _id: string;
   created_time: string;
   effective_time: string;
   description: string;
   url: string;
+
+  /**
+   * Human-readable version of the policy text, e.g. "2026-06"
+   */
+  version?: string;
+
+  /**
+   * SHA-256 of the exact document set this policy refers to.
+   *
+   * Optional on the wire because a policy can be published without one,
+   * but consent CANNOT be recorded against such a policy - the server
+   * rejects it, because a record that cannot be tied to a specific
+   * document is not evidence.
+   */
+  sha256?: string;
 };
+
+/**
+ * One unbundled acknowledgement: which item, and whether it was agreed to.
+ *
+ * Deliberately one entry per item rather than a single boolean for the
+ * screen. Bundled consent is invalid, and the endpoint has no way to express
+ * it - so neither does this type.
+ */
+export type ConsentAck = {
+  ack_key: string;
+  granted: boolean;
+};
+
+/**
+ * Record unbundled consent against one specific policy.
+ *
+ * Takes the policy OBJECT rather than an id on purpose: the three identity
+ * fields the server verifies (id, version, sha256) are then guaranteed to come
+ * from the same policy the caller actually rendered, instead of being assembled
+ * from separate arguments that could drift apart.
+ *
+ * Uses a raw fetch rather than the generated API client because /policy/consent
+ * is not in the published stoat-api schema. Same reason and same shape as
+ * Channel.flushAck.
+ */
+async function recordConsent(
+  client: Client,
+  policy: PolicyChange,
+  acks: ConsentAck[],
+): Promise<void> {
+  if (!acks.length) {
+    throw new Error("recordConsent: no acknowledgements supplied");
+  }
+
+  // Fail here rather than sending a request the server will reject. A policy
+  // published without a version or hash cannot be consented to at all, and
+  // saying so plainly beats a validation error surfacing in the UI.
+  if (!policy.version || !policy.sha256) {
+    throw new Error(
+      "recordConsent: this policy was published without a version or sha256, " +
+        "so consent cannot be tied to a specific document and will be rejected",
+    );
+  }
+
+  const { baseURL, headers } = client.api.config;
+  const response = await fetch(`${baseURL}/policy/consent`, {
+    method: "POST",
+    headers: { ...headers, "content-type": "application/json" },
+    body: JSON.stringify({
+      policy_id: policy._id,
+      policy_version: policy.version,
+      policy_sha256: policy.sha256,
+      acks,
+      client: "web",
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `recordConsent: server rejected the consent record (${response.status})`,
+    );
+  }
+}
 
 /**
  * Voice state for a user
@@ -348,8 +428,11 @@ export async function handleEvent(
       client.emit("ready");
 
       if (event.policy_changes?.length) {
-        client.emit("policyChanges", event.policy_changes, async () =>
-          client.api.post("/policy/acknowledge"),
+        client.emit(
+          "policyChanges",
+          event.policy_changes,
+          async () => client.api.post("/policy/acknowledge"),
+          (policy, acks) => recordConsent(client, policy, acks),
         );
       }
 
