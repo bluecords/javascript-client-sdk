@@ -28,7 +28,14 @@ import {
   EventClient,
   type EventClientOptions,
 } from "./events/EventClient.js";
-import { ProtocolV1, UserSlowmodes, handleEvent } from "./events/v1.js";
+import {
+  ConsentAck,
+  ConsentState,
+  PolicyChange,
+  ProtocolV1,
+  UserSlowmodes,
+  handleEvent,
+} from "./events/v1.js";
 import type { HydratedChannel } from "./hydration/channel.js";
 import type { HydratedEmoji } from "./hydration/emoji.js";
 import type { HydratedMessage } from "./hydration/message.js";
@@ -422,6 +429,106 @@ export class Client extends AsyncEventEmitter<Events> {
     this.events.removeAllListeners();
     this.removeAllListeners();
     this.events.disconnect();
+  }
+
+  /**
+   * Read this account's current consent position on the policy in force.
+   *
+   * Server-derived rather than remembered locally. The media gate is "once per
+   * account", so it has to follow a member across devices - a value kept in the
+   * browser answers a different, weaker question.
+   */
+  async fetchConsent(): Promise<ConsentState> {
+    const { baseURL, headers } = this.api.config;
+    const response = await fetch(`${baseURL}/policy/consent`, { headers });
+
+    if (!response.ok) {
+      throw new Error(`fetchConsent: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Record unbundled consent against one specific policy.
+   *
+   * Takes the policy OBJECT rather than an id on purpose: the three identity
+   * fields the server verifies are then guaranteed to come from the same policy
+   * the caller actually rendered, instead of being assembled from separate
+   * arguments that could drift apart.
+   */
+  async recordConsent(policy: PolicyChange, acks: ConsentAck[]): Promise<void> {
+    if (!policy.version || !policy.sha256) {
+      throw new Error(
+        "recordConsent: this policy was published without a version or sha256, " +
+          "so consent cannot be tied to a specific document and will be rejected",
+      );
+    }
+
+    return this.#postConsent(policy._id, policy.version, policy.sha256, acks);
+  }
+
+  /**
+   * Record consent against whatever policy is currently in force.
+   *
+   * For gates that fire long after login and have no reason to still be holding
+   * the Ready payload. The policy identity comes back from the server in the
+   * same breath, so the caller never assembles it - which is the thing that goes
+   * wrong when it gets passed around as three loose strings.
+   */
+  async recordConsentForCurrentPolicy(acks: ConsentAck[]): Promise<void> {
+    const state = await this.fetchConsent();
+
+    if (!state.policy_version || !state.policy_sha256) {
+      throw new Error(
+        "recordConsentForCurrentPolicy: the policy in force was published " +
+          "without a version or sha256, so consent cannot be tied to a document",
+      );
+    }
+
+    return this.#postConsent(
+      state.policy_id,
+      state.policy_version,
+      state.policy_sha256,
+      acks,
+    );
+  }
+
+  /**
+   * Shared body of the two consent recorders.
+   *
+   * Raw fetch rather than the generated API client because /policy/consent is
+   * not in the published stoat-api schema. Same reason and shape as
+   * Channel.flushAck.
+   */
+  async #postConsent(
+    policyId: string,
+    policyVersion: string,
+    policySha256: string,
+    acks: ConsentAck[],
+  ): Promise<void> {
+    if (!acks.length) {
+      throw new Error("recordConsent: no acknowledgements supplied");
+    }
+
+    const { baseURL, headers } = this.api.config;
+    const response = await fetch(`${baseURL}/policy/consent`, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({
+        policy_id: policyId,
+        policy_version: policyVersion,
+        policy_sha256: policySha256,
+        acks,
+        client: "web",
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `recordConsent: server rejected the consent record (${response.status})`,
+      );
+    }
   }
 
   /**
