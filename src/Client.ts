@@ -432,6 +432,25 @@ export class Client extends AsyncEventEmitter<Events> {
   }
 
   /**
+   * Whether the server is actually RESTRICTING unconsented members, as opposed
+   * to merely having published a policy.
+   *
+   * The two are separate on purpose and a client cannot infer one from the
+   * other: a policy can exist with nothing enforced. Guessing wrong is bad in
+   * both directions - a dismissible prompt while access is blocked, or an
+   * unskippable wall while nothing is enforced.
+   *
+   * Cast because consent_gate is not in the published stoat-api schema yet.
+   * Defaults to FALSE: a client that cannot see the field must not trap anyone.
+   */
+  get consentGateEnforcing(): boolean {
+    return (
+      (this.configuration?.features as { consent_gate?: boolean } | undefined)
+        ?.consent_gate ?? false
+    );
+  }
+
+  /**
    * Read this account's current consent position on the policy in force.
    *
    * Server-derived rather than remembered locally. The media gate is "once per
