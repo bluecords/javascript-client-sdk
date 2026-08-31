@@ -36,6 +36,7 @@ export type ProtocolV1 = {
   types: {
     policyChange: PolicyChange;
     consentAck: ConsentAck;
+    consentState: ConsentState;
   };
 };
 
@@ -213,7 +214,7 @@ type ServerMessage =
 /**
  * Policy change type
  */
-type PolicyChange = {
+export type PolicyChange = {
   _id: string;
   created_time: string;
   effective_time: string;
@@ -249,55 +250,18 @@ export type ConsentAck = {
 };
 
 /**
- * Record unbundled consent against one specific policy.
+ * An account's current position on the policy in force.
  *
- * Takes the policy OBJECT rather than an id on purpose: the three identity
- * fields the server verifies (id, version, sha256) are then guaranteed to come
- * from the same policy the caller actually rendered, instead of being assembled
- * from separate arguments that could drift apart.
- *
- * Uses a raw fetch rather than the generated API client because /policy/consent
- * is not in the published stoat-api schema. Same reason and same shape as
- * Channel.flushAck.
+ * Derived server-side from the append-only records - the latest decision per
+ * `ack_key` wins - and scoped to the CURRENT policy, so a grant against
+ * superseded text does not show up here as consent to this one.
  */
-async function recordConsent(
-  client: Client,
-  policy: PolicyChange,
-  acks: ConsentAck[],
-): Promise<void> {
-  if (!acks.length) {
-    throw new Error("recordConsent: no acknowledgements supplied");
-  }
-
-  // Fail here rather than sending a request the server will reject. A policy
-  // published without a version or hash cannot be consented to at all, and
-  // saying so plainly beats a validation error surfacing in the UI.
-  if (!policy.version || !policy.sha256) {
-    throw new Error(
-      "recordConsent: this policy was published without a version or sha256, " +
-        "so consent cannot be tied to a specific document and will be rejected",
-    );
-  }
-
-  const { baseURL, headers } = client.api.config;
-  const response = await fetch(`${baseURL}/policy/consent`, {
-    method: "POST",
-    headers: { ...headers, "content-type": "application/json" },
-    body: JSON.stringify({
-      policy_id: policy._id,
-      policy_version: policy.version,
-      policy_sha256: policy.sha256,
-      acks,
-      client: "web",
-    }),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `recordConsent: server rejected the consent record (${response.status})`,
-    );
-  }
-}
+export type ConsentState = {
+  policy_id: string;
+  policy_version?: string;
+  policy_sha256?: string;
+  acks: ConsentAck[];
+};
 
 /**
  * Voice state for a user
@@ -432,7 +396,7 @@ export async function handleEvent(
           "policyChanges",
           event.policy_changes,
           async () => client.api.post("/policy/acknowledge"),
-          (policy, acks) => recordConsent(client, policy, acks),
+          (policy, acks) => client.recordConsent(policy, acks),
         );
       }
 
