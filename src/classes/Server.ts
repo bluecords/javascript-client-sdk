@@ -904,12 +904,25 @@ export class Server {
   async queryMembersExperimental(
     query: string,
   ): Promise<{ members: ServerMember[]; users: User[] }> {
+    // Params go as the SECOND argument, never baked into the path.
+    //
+    // The generated client owns query-string construction: params.js declares
+    // this route's params as ["query", "experimental_api"], and the client
+    // appends its own query string. Passing a path that ALREADY contained one
+    // (and casting it `as never` to silence the type error) meant the client
+    // appended an empty query string on top, producing a trailing "?" - so the
+    // server searched for `Derek?` and honestly matched nobody.
+    //
+    // Measured on a handset 2026-09-03, by logging the request the client
+    // actually made:
+    //   ...members_experimental_query?experimental_api=true&query=Derek?
+    // while the same query sent by hand returned exactly one member.
+    //
+    // Nothing called this method until mobile people-search shipped, which is
+    // why the defect sat here unnoticed.
     const data = (await this.#collection.client.api.get(
-      `/servers/${
-        this.id as ""
-      }/members_experimental_query?experimental_api=true&query=${encodeURIComponent(
-        query,
-      )}` as never,
+      `/servers/${this.id as ""}/members_experimental_query`,
+      { query, experimental_api: true },
     )) as AllMemberResponse;
 
     return batch(() => ({
