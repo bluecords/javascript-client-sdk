@@ -710,13 +710,18 @@ export class Server {
    * Raw fetch rather than `api.get`, because this route is NAC's own and is not
    * in the published stoat-api schema - the same shape `Client.fetchConsent`
    * uses for the policy routes.
+   *
+   * The path is `/member-attribution`, NOT `/members/attribution`. The nested
+   * form collided with `/servers/{id}/members/{member}` on the server: Rocket
+   * ranked the two equally and read "attribution" as a member id, so the route
+   * 404'd from inside the member lookup and never reached its own handler.
    */
   async fetchMemberAttribution(): Promise<
     { user: string; invited_by?: string; invite_code?: string }[]
   > {
     const { baseURL, headers } = this.#collection.client.api.config;
     const response = await fetch(
-      `${baseURL}/servers/${this.id}/members/attribution`,
+      `${baseURL}/servers/${this.id}/member-attribution`,
       { headers },
     );
 
