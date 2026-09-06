@@ -698,6 +698,35 @@ export class Server {
    * Fetch a server's bans
    * @returns An array of the server's bans.
    */
+  /**
+   * Fetch how each member came to be in this server: who invited them, and
+   * with which code.
+   *
+   * A SEPARATE, permission-gated call rather than fields on the member object,
+   * because the member object is broadcast to everyone in the server and who
+   * vouched for whom is admin information. Requires ManageServer; the server
+   * returns 403 otherwise.
+   *
+   * Raw fetch rather than `api.get`, because this route is NAC's own and is not
+   * in the published stoat-api schema - the same shape `Client.fetchConsent`
+   * uses for the policy routes.
+   */
+  async fetchMemberAttribution(): Promise<
+    { user: string; invited_by?: string; invite_code?: string }[]
+  > {
+    const { baseURL, headers } = this.#collection.client.api.config;
+    const response = await fetch(
+      `${baseURL}/servers/${this.id}/members/attribution`,
+      { headers },
+    );
+
+    if (!response.ok) {
+      throw new Error(`fetchMemberAttribution: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
   async fetchBans(): Promise<ServerBan[]> {
     const { users, bans } = await this.#collection.client.api.get(
       `/servers/${this.id as ""}/bans`,
