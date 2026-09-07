@@ -264,6 +264,52 @@ export type ConsentState = {
 };
 
 /**
+ * One searchable Discord account from the migration snapshot.
+ *
+ * `claimed` is why a collision shows up in the picker rather than after
+ * pressing Continue: two members reaching for the same name is visible, not
+ * silent.
+ */
+export type DiscordMemberSuggestion = {
+  id: string;
+  username: string;
+  display_name?: string;
+  nickname?: string;
+  claimed: boolean;
+};
+
+/**
+ * A page of Discord name suggestions.
+ *
+ * Paged SERVER-side. Fetching the roster into the browser and filtering it
+ * here works at 130 members and dies at 3,000, and the same flow has to serve
+ * a white-label tenant that size.
+ */
+export type DiscordMemberSearch = {
+  items: DiscordMemberSuggestion[];
+  total: number;
+};
+
+/**
+ * A member's claim on a Discord account.
+ *
+ * A claim is NOT a link. Until `confirmed_by` and `confirmed_at` are both set
+ * by an admin it does nothing at all - re-attribution ignores it, deliberately
+ * loudly, because confirming is what hands somebody edit and delete rights
+ * over six years of another person's posts.
+ */
+export type DiscordIdentityClaim = {
+  discord_id: string;
+  discord_username: string;
+  discord_display_name?: string;
+  user: string;
+  claimed_at: string;
+  source: string;
+  confirmed_by?: string;
+  confirmed_at?: string;
+};
+
+/**
  * Voice state for a user
  */
 export type UserVoiceState = {
