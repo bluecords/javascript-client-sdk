@@ -31,6 +31,8 @@ import {
 import {
   ConsentAck,
   ConsentState,
+  DiscordIdentityClaim,
+  DiscordMemberSearch,
   PolicyChange,
   ProtocolV1,
   UserSlowmodes,
@@ -547,6 +549,157 @@ export class Client extends AsyncEventEmitter<Events> {
       throw new Error(
         `recordConsent: server rejected the consent record (${response.status})`,
       );
+    }
+  }
+
+  /**
+   * Search the snapshot of the community's Discord membership.
+   *
+   * SERVER-side and paged, and that is the whole point: `[RULED BY BUNJIE]`
+   * "some groups have thousands. That would be a nightmare." Fetching the
+   * roster and filtering it here works at 130 members and falls over at 3,000,
+   * and this flow is a white-label requirement rather than only a NAC screen.
+   *
+   * Raw fetch rather than the generated API client because these routes are
+   * not in the published stoat-api schema - same reason and shape as
+   * `fetchConsent` above.
+   */
+  async searchDiscordMembers(
+    query: string,
+    options?: { skip?: number; limit?: number },
+  ): Promise<DiscordMemberSearch> {
+    const { baseURL, headers } = this.api.config;
+    const params = new URLSearchParams({ query });
+    if (options?.skip) params.set("skip", String(options.skip));
+    if (options?.limit) params.set("limit", String(options.limit));
+
+    const response = await fetch(
+      `${baseURL}/policy/discord/search?${params.toString()}`,
+      { headers },
+    );
+
+    if (!response.ok) {
+      throw new Error(`searchDiscordMembers: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * The Discord account this member has already claimed, if any.
+   *
+   * Read before showing the picker so somebody who has already answered is
+   * shown their answer instead of being asked a second time.
+   */
+  async fetchMyDiscordIdentity(): Promise<DiscordIdentityClaim | null> {
+    const { baseURL, headers } = this.api.config;
+    const response = await fetch(`${baseURL}/policy/discord/identity`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`fetchMyDiscordIdentity: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Claim a Discord account, by id from the search results.
+   *
+   * The id must come from a search result - free text is exactly what this
+   * flow exists to avoid, because a typed name cannot be matched reliably and
+   * cannot be shown back to an admin as the thing they are confirming.
+   *
+   * The claim is stored UNCONFIRMED and does nothing on its own. An admin
+   * confirms it, and only then does re-attribution act on it.
+   *
+   * Throws with the server's own message when it refuses, because the two
+   * refusals a member can actually hit - somebody else claimed that account,
+   * or yours is already confirmed - need to be readable, not a status code.
+   */
+  async claimDiscordIdentity(discordId: string): Promise<DiscordIdentityClaim> {
+    const { baseURL, headers } = this.api.config;
+    const response = await fetch(`${baseURL}/policy/discord/identity`, {
+      method: "PUT",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ discord_id: discordId }),
+    });
+
+    if (!response.ok) {
+      const detail = await response
+        .json()
+        .then((body) => (body as { error?: string }).error)
+        .catch(() => undefined);
+
+      throw new Error(detail ?? `claimDiscordIdentity: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Release an unconfirmed claim, so a different name can be picked.
+   */
+  async withdrawDiscordIdentity(): Promise<void> {
+    const { baseURL, headers } = this.api.config;
+    const response = await fetch(`${baseURL}/policy/discord/identity`, {
+      method: "DELETE",
+      headers,
+    });
+
+    if (!response.ok) {
+      throw new Error(`withdrawDiscordIdentity: ${response.status}`);
+    }
+  }
+
+  /**
+   * Every Discord identity claim on a server. Requires ManageServer.
+   */
+  async fetchDiscordClaims(serverId: string): Promise<DiscordIdentityClaim[]> {
+    const { baseURL, headers } = this.api.config;
+    const response = await fetch(
+      `${baseURL}/servers/${serverId}/discord-claims`,
+      { headers },
+    );
+
+    if (!response.ok) {
+      throw new Error(`fetchDiscordClaims: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Confirm a claim, which is what lets re-attribution act on it.
+   */
+  async confirmDiscordClaim(
+    serverId: string,
+    discordId: string,
+  ): Promise<void> {
+    const { baseURL, headers } = this.api.config;
+    const response = await fetch(
+      `${baseURL}/servers/${serverId}/discord-claims/${discordId}`,
+      { method: "PUT", headers },
+    );
+
+    if (!response.ok) {
+      throw new Error(`confirmDiscordClaim: ${response.status}`);
+    }
+  }
+
+  /**
+   * Reject a claim, freeing the Discord account for the right person.
+   */
+  async rejectDiscordClaim(serverId: string, discordId: string): Promise<void> {
+    const { baseURL, headers } = this.api.config;
+    const response = await fetch(
+      `${baseURL}/servers/${serverId}/discord-claims/${discordId}`,
+      { method: "DELETE", headers },
+    );
+
+    if (!response.ok) {
+      throw new Error(`rejectDiscordClaim: ${response.status}`);
     }
   }
 
