@@ -93,7 +93,10 @@ export const Permission = {
   MentionRoles: 2n ** 38n,
 
   // * Misc. permissions
-  // % Bits 39 to 52: free area
+  /// Use the animated (GIF) emoji pack in Appearance settings
+  UseAnimatedEmoji: 2n ** 40n,
+
+  // % Bits 41 to 52: free area
   // % Bits 53 to 64: do not use
 
   // * Grant all permissions
