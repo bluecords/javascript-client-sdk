@@ -96,7 +96,11 @@ export const Permission = {
   /// Use the animated (GIF) emoji pack in Appearance settings
   UseAnimatedEmoji: 2n ** 40n,
 
-  // % Bits 41 to 52: free area
+  // * Member verification
+  /// Confirm members' Discord identities and see how members joined, without ManageServer
+  VerifyMembers: 2n ** 41n,
+
+  // % Bits 42 to 52: free area
   // % Bits 53 to 64: do not use
 
   // * Grant all permissions
