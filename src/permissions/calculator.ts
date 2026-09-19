@@ -18,6 +18,24 @@ export function bitwiseAndEq(a: bigint, ...b: bigint[]): boolean {
   return (value & a) === value;
 }
 
+type AllowDeny = { a: bigint; d: bigint };
+
+/**
+ * Blend a class default underneath a role's own explicit override, the same way
+ * the backend's `resolve_role_base_override` does: any bit the role has
+ * explicitly allowed or denied wins, every other bit inherits from the class.
+ */
+export function blendClassOverride(
+  classOverride: AllowDeny,
+  explicit: AllowDeny,
+): AllowDeny {
+  const touched = explicit.a | explicit.d;
+  return {
+    a: (classOverride.a & ~touched) | explicit.a,
+    d: (classOverride.d & ~touched) | explicit.d,
+  };
+}
+
 /**
  * Calculate permissions against a given object
  * @param target Target object to check permissions against
@@ -58,12 +76,20 @@ export function calculatePermission(
       // 4. If user has roles, iterate in order.
       if (member.roles && target.roles) {
         // 5. Apply allows and denies from roles.
-        const permissions = member.orderedRoles.map(
-          (role) => role.permissions ?? { a: 0, d: 0 },
-        );
+        for (const role of member.orderedRoles) {
+          const explicit: AllowDeny = {
+            a: BigInt(role.permissions?.a ?? 0),
+            d: BigInt(role.permissions?.d ?? 0),
+          };
 
-        for (const permission of permissions) {
-          perm = (perm | BigInt(permission.a)) & ~BigInt(permission.d);
+          const resolved = role.class
+            ? blendClassOverride(
+                target.getClassDefault(role.class).permissions,
+                explicit,
+              )
+            : explicit;
+
+          perm = (perm | resolved.a) & ~resolved.d;
         }
       }
 
@@ -129,14 +155,29 @@ export function calculatePermission(
           }
 
           // 7. If user has roles, iterate in order.
-          if (member.roles && target.rolePermissions && server.roles) {
-            // 5. Apply allows and denies from roles.
-            const roles = member.orderedRoles.map(({ id }) => id);
+          if (member.roles && server.roles) {
+            // 5. Apply allows and denies from roles - including a classed
+            // role's per-channel class template, even with no explicit entry.
+            for (const role of member.orderedRoles) {
+              const raw = target.rolePermissions?.[role.id];
+              let override: AllowDeny | undefined = raw
+                ? { a: BigInt(raw.a), d: BigInt(raw.d) }
+                : undefined;
 
-            for (const id of roles) {
-              const override = target.rolePermissions[id];
+              const template = role.class
+                ? server
+                    .getClassDefault(role.class)
+                    .channelOverrides.get(target.id)
+                : undefined;
+              if (template) {
+                override = blendClassOverride(
+                  template,
+                  override ?? { a: 0n, d: 0n },
+                );
+              }
+
               if (override) {
-                perm = (perm | BigInt(override.a)) & ~BigInt(override.d);
+                perm = (perm | override.a) & ~override.d;
               }
             }
           }
