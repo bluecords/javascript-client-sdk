@@ -253,8 +253,10 @@ export class EventClient<
         this.#recordDrop("closed", { dc_code: String(event.code) });
       }
       this.#socket = undefined;
-      this.setState(ConnectionState.Disconnected);
+      // Clean up BEFORE announcing: a listener may call connect() straight
+      // from the state event, and cleaning up after would kill that socket.
       this.disconnect("closed");
+      this.setState(ConnectionState.Disconnected);
     };
   }
 
