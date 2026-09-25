@@ -350,7 +350,7 @@ export class Client extends AsyncEventEmitter<Events> {
    */
   connect(): void {
     clearTimeout(this.#reconnectTimeout);
-    this.events.disconnect();
+    this.events.disconnect("reconnect");
     this.#setReady(false);
     if (!this.configuration?.ws) {
       throw new Error(
