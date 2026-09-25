@@ -44,6 +44,7 @@ interface ForumPostFields {
 interface ForumChannelEditFields {
   allowed_tags?: string[];
   solution_enabled?: boolean;
+  gallery_layout?: boolean;
 }
 
 /**
@@ -289,6 +290,15 @@ export class Channel {
    */
   get solutionEnabled(): boolean {
     return this.#collection.getUnderlyingObject(this.id).solutionEnabled;
+  }
+
+  /**
+   * Whether posts in this forum channel show as a two-column image gallery
+   * instead of a list
+   * @requires `ForumChannel`
+   */
+  get galleryLayout(): boolean {
+    return this.#collection.getUnderlyingObject(this.id).galleryLayout;
   }
 
   /**
