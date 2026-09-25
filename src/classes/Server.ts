@@ -527,6 +527,7 @@ export class Server {
       type?: DataCreateServerChannel["type"] | "Forum";
       allowed_tags?: string[];
       solution_enabled?: boolean;
+      gallery_layout?: boolean;
     },
   ): Promise<Channel> {
     const channel = await this.#collection.client.api.post(

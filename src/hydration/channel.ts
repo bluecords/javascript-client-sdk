@@ -41,11 +41,13 @@ export type HydratedChannel = {
   // ForumChannel + allowed_tags/solution_enabled (tracked: nac-server#10).
   allowedTags?: string[];
   solutionEnabled: boolean;
+  galleryLayout: boolean;
 };
 
 export interface ForumChannelFields {
   allowed_tags?: string[];
   solution_enabled?: boolean;
+  gallery_layout?: boolean;
 }
 
 export const channelHydration: Hydrate<
@@ -65,6 +67,7 @@ export const channelHydration: Hydrate<
     slowmode: "slowmode",
     allowed_tags: "allowedTags",
     solution_enabled: "solutionEnabled",
+    gallery_layout: "galleryLayout",
   },
   functions: {
     id: (channel) => channel._id,
@@ -98,6 +101,7 @@ export const channelHydration: Hydrate<
     slowmode: (channel) => channel.slowmode ?? 0,
     allowedTags: (channel) => channel.allowed_tags,
     solutionEnabled: (channel) => channel.solution_enabled || false,
+    galleryLayout: (channel) => channel.gallery_layout || false,
     voice: (channel) =>
       !!channel.voice ||
       channel.channel_type === "DirectMessage" ||
