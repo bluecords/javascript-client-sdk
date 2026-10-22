@@ -21,6 +21,26 @@ export function bitwiseAndEq(a: bigint, ...b: bigint[]): boolean {
 type AllowDeny = { a: bigint; d: bigint };
 
 /**
+ * Lay one override over another: wherever `top` allows or denies a permission
+ * it wins, every other permission shows `base` through. Mirrors the backend's
+ * `layer_override`, used to put a channel's own overrides over its category's.
+ */
+export function layerOverride(base: AllowDeny, top: AllowDeny): AllowDeny {
+  const touched = top.a | top.d;
+  return {
+    a: (base.a & ~touched) | top.a,
+    d: (base.d & ~touched) | top.d,
+  };
+}
+
+/**
+ * Category overrides as sent by the API (plain numbers) as `AllowDeny`.
+ */
+export function toAllowDeny(raw?: { a: number | bigint; d: number | bigint }) {
+  return raw ? { a: BigInt(raw.a), d: BigInt(raw.d) } : undefined;
+}
+
+/**
  * Blend a class default underneath a role's own explicit override, the same way
  * the backend's `resolve_role_base_override` does: any bit the role has
  * explicitly allowed or denied wins, every other bit inherits from the class.
@@ -147,11 +167,26 @@ export function calculatePermission(
           // 5. Calculate server base permissions.
           let perm = BigInt(calculatePermission(client, server, options));
 
-          // 6. Apply default allows and denies for channel.
-          if (target.defaultPermissions) {
-            perm =
-              (perm | BigInt(target.defaultPermissions.a)) &
-              ~BigInt(target.defaultPermissions.d);
+          // 6. Apply default allows and denies for channel, laid over its
+          // category's (the channel wins for anything it sets itself).
+          const category = target.category;
+          const defaults =
+            category && target.defaultPermissions
+              ? layerOverride(
+                  toAllowDeny(category.default_permissions) ?? { a: 0n, d: 0n },
+                  {
+                    a: BigInt(target.defaultPermissions.a),
+                    d: BigInt(target.defaultPermissions.d),
+                  },
+                )
+              : target.defaultPermissions
+                ? {
+                    a: BigInt(target.defaultPermissions.a),
+                    d: BigInt(target.defaultPermissions.d),
+                  }
+                : toAllowDeny(category?.default_permissions);
+          if (defaults) {
+            perm = (perm | defaults.a) & ~defaults.d;
           }
 
           // 7. If user has roles, iterate in order.
@@ -160,9 +195,16 @@ export function calculatePermission(
             // role's per-channel class template, even with no explicit entry.
             for (const role of member.orderedRoles) {
               const raw = target.rolePermissions?.[role.id];
-              let override: AllowDeny | undefined = raw
+              const own: AllowDeny | undefined = raw
                 ? { a: BigInt(raw.a), d: BigInt(raw.d) }
                 : undefined;
+              const inherited = toAllowDeny(
+                target.category?.role_permissions?.[role.id],
+              );
+              let override: AllowDeny | undefined =
+                inherited && own
+                  ? layerOverride(inherited, own)
+                  : (own ?? inherited);
 
               const template = role.class
                 ? server

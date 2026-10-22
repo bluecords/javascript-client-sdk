@@ -40,6 +40,15 @@ import { ServerMember } from "./ServerMember.js";
 import { ServerRole, type RoleClass } from "./ServerRole.js";
 import { User } from "./User.js";
 
+// TODO: drop once stoat-api is regenerated from a stoatchat release that
+// includes category permissions.
+export type CategoryWithPermissions = Category & {
+  /** What the category gives everyone in its channels */
+  default_permissions?: { a: number; d: number };
+  /** What the category gives each role in its channels */
+  role_permissions?: Record<string, { a: number; d: number }>;
+};
+
 /**
  * Server Class
  */
@@ -151,8 +160,28 @@ export class Server {
   /**
    * Categories
    */
-  get categories(): Category[] | undefined {
+  get categories(): CategoryWithPermissions[] | undefined {
     return this.#collection.getUnderlyingObject(this.id).categories;
+  }
+
+  /**
+   * Set what a category gives a role (or everyone, with `"default"`) in the
+   * channels it holds. Channels inherit it, except for permissions they set
+   * themselves.
+   * @param categoryId Category id
+   * @param roleId Role id, or `"default"` for everyone
+   * @param permissions Allow / deny values
+   * @requires `ManagePermissions`
+   */
+  async setCategoryPermissions(
+    categoryId: string,
+    roleId: string,
+    permissions: { allow: number; deny: number },
+  ): Promise<void> {
+    await this.#collection.client.api.put(
+      `/servers/${this.id as ""}/categories/${categoryId as ""}/permissions/${roleId as ""}` as "/servers/{target}/permissions/{role_id}",
+      { permissions } as never,
+    );
   }
 
   /**
@@ -345,7 +374,7 @@ export class Server {
    * Get an array of ordered categories with their respective channels.
    * Uncategorised channels are returned in `id="default"` category.
    */
-  get orderedChannels(): (Omit<Category, "channels"> & {
+  get orderedChannels(): (Omit<CategoryWithPermissions, "channels"> & {
     channels: Channel[];
   })[] {
     const uncategorised = new Set(this.channels.map((channel) => channel.id));
