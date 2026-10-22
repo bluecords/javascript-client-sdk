@@ -27,7 +27,7 @@ import { Permission } from "../permissions/definitions.js";
 import type { ChannelWebhook } from "./ChannelWebhook.js";
 import type { File } from "./File.js";
 import type { Message } from "./Message.js";
-import type { Server } from "./Server.js";
+import type { CategoryWithPermissions, Server } from "./Server.js";
 import type { ServerMember } from "./ServerMember.js";
 import type { User } from "./User.js";
 import { VoiceParticipant } from "./VoiceParticipant.js";
@@ -260,6 +260,15 @@ export class Channel {
    */
   get defaultPermissions(): { a: bigint; d: bigint } | undefined {
     return this.#collection.getUnderlyingObject(this.id).defaultPermissions;
+  }
+
+  /**
+   * The category this channel is in, if any
+   */
+  get category(): CategoryWithPermissions | undefined {
+    return this.server?.categories?.find((category) =>
+      category.channels.includes(this.id),
+    );
   }
 
   /**
