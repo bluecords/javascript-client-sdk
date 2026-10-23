@@ -178,10 +178,20 @@ export class Server {
     roleId: string,
     permissions: { allow: number; deny: number },
   ): Promise<void> {
-    await this.#collection.client.api.put(
-      `/servers/${this.id as ""}/categories/${categoryId as ""}/permissions/${roleId as ""}` as "/servers/{target}/permissions/{role_id}",
-      { permissions } as never,
+    // The API client only builds a request body for routes it already knows,
+    // and category permissions are newer than its route list (it would send
+    // an empty body), so this one request is made directly.
+    const { baseURL, headers } = this.#collection.client.api.config;
+    const response = await fetch(
+      `${baseURL}/servers/${this.id}/categories/${categoryId}/permissions/${roleId}`,
+      {
+        method: "PUT",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions }),
+      },
     );
+
+    if (!response.ok) throw await response.text();
   }
 
   /**
