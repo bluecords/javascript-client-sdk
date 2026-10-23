@@ -58,7 +58,16 @@ export function builtInClassDefault(roleClass: RoleClass): ClassDefault {
 
 // `class_defaults` is newer than the generated `stoat-api` package - see the
 // matching comment in ServerRole.ts.
+/** Notification levels an admin set for members who have not chosen their own. */
+export type NotificationDefaults = {
+  /** Level for the whole server */
+  server?: "all" | "mention";
+  /** Level per channel id */
+  channels?: Record<string, "all" | "mention" | "none">;
+};
+
 type APIServerWithClassDefaults = APIServer & {
+  notification_defaults?: NotificationDefaults;
   class_defaults?: Record<
     RoleClass,
     {
@@ -81,6 +90,7 @@ export type HydratedServer = {
 
   channelIds: ReactiveSet<string>;
   categories?: Category[];
+  notificationDefaults?: NotificationDefaults;
 
   systemMessages?: SystemMessageChannels;
   roles: ReactiveMap<string, ServerRole>;
@@ -104,6 +114,7 @@ export const serverHydration: Hydrate<APIServer, HydratedServer> = {
     // `APIServerWithClassDefaults` above) - cast needed since `APIServer`
     // doesn't declare this key yet.
     class_defaults: "classDefaults",
+    notification_defaults: "notificationDefaults",
   } as Partial<KeyMapping<APIServerWithClassDefaults, HydratedServer>>,
   functions: {
     id: (server) => server._id,
@@ -112,6 +123,8 @@ export const serverHydration: Hydrate<APIServer, HydratedServer> = {
     description: (server) => server.description!,
     channelIds: (server) => new ReactiveSet(server.channels),
     categories: (server) => server.categories ?? [],
+    notificationDefaults: (server) =>
+      (server as APIServerWithClassDefaults).notification_defaults ?? {},
     systemMessages: (server) => server.system_messages ?? {},
     roles: (server, ctx) =>
       new ReactiveMap(
