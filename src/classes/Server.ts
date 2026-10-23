@@ -20,6 +20,7 @@ import { decodeTime } from "ulid";
 
 import type { ServerCollection } from "../collections/ServerCollection.js";
 import { hydrate } from "../hydration/index.js";
+import type { NotificationDefaults } from "../hydration/server.js";
 import {
   builtInClassDefault,
   type ClassDefault,
@@ -192,6 +193,30 @@ export class Server {
     );
 
     if (!response.ok) throw await response.text();
+  }
+
+  /**
+   * What an admin set for members who have not chosen their own notification
+   * level: one for the whole server and one per channel
+   */
+  get notificationDefaults(): NotificationDefaults {
+    return (
+      this.#collection.getUnderlyingObject(this.id).notificationDefaults ?? {}
+    );
+  }
+
+  /**
+   * Set the notification defaults. Replaces the whole object.
+   * @param defaults Server level and per-channel levels
+   * @requires `ManageServer`
+   */
+  async setNotificationDefaults(defaults: NotificationDefaults): Promise<void> {
+    await this.edit({
+      notification_defaults: {
+        server: defaults.server,
+        channels: defaults.channels ?? {},
+      },
+    } as unknown as DataEditServer);
   }
 
   /**
@@ -1065,3 +1090,5 @@ export class Server {
     await this.#collection.client.api.delete(`/custom/emoji/${emojiId}`);
   }
 }
+
+export type { NotificationDefaults };
