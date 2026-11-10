@@ -473,8 +473,12 @@ export async function handleEvent(
             event._id,
           );
 
+          // Count every kind of mention (direct, role, @everyone/@online), not
+          // just direct ones, but never our own message.
           if (
-            event.mentions?.includes(client.user!.id) &&
+            event.author !== client.user!.id &&
+            (event.mentions?.includes(client.user!.id) ||
+              client.messages.get(event._id)?.mentioned) &&
             client.options.syncUnreads
           ) {
             const unread = client.channelUnreads.for(channel);
