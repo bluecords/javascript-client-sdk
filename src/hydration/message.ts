@@ -56,6 +56,9 @@ export const messageHydration: Hydrate<
     system: "systemMessage",
     edited: "editedAt",
     mentions: "mentionIds",
+    // without this the API's `role_mentions` was skipped during hydration,
+    // so a role mention never counted as mentioning anyone
+    role_mentions: "roleMentionIds",
     replies: "replyIds",
     forum_title: "forumTitle",
     forum_tags: "forumTags",

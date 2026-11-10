@@ -199,9 +199,12 @@ export class Message {
    * Whether this message mentions us
    */
   get mentioned(): boolean {
+    // The server stores MessageFlags as bit POSITIONS (MentionsEveryone = 2
+    // is stored as 1 << 2 = 4), so test the bit, not the raw enum value.
+    const hasFlag = (bit: MessageFlags) => ((this.flags ?? 0) & (1 << bit)) !== 0;
     return (
-      !!(this.flags & MessageFlags.MentionsEveryone) ||
-      !!(this.flags & MessageFlags.MentionsOnline) ||
+      hasFlag(MessageFlags.MentionsEveryone) ||
+      hasFlag(MessageFlags.MentionsOnline) ||
       this.mentionIds?.includes(this.#collection.client.user!.id) ||
       this.roleMentions?.some((role) => role.assigned) ||
       false
